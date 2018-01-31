@@ -3,9 +3,12 @@
  * License: https://github.com/gdavidbutler/xmlTrivialCallbackParser/blob/master/LICENSE
  */
 
+#include "xml.h"
+
+XML_BEGIN_EXTERN_C
+
 #include <stdio.h>
 #include <stdlib.h>
-#include "xml.h"
 
 int
 xmlParse(
@@ -290,7 +293,7 @@ eNm:
 
       if (!(t = realloc(tg, (tgM + 1) * sizeof(*tg))))
         goto rtn;
-      tg = t;
+      tg = (xmlSt_t *)t;
       tgM++;
     }
     (tg + tgL)->s = s - 1;
@@ -399,7 +402,7 @@ sNm:
 
     if (!(t = realloc(tg, (tgM + 1) * sizeof(*tg))))
       goto rtn;
-    tg = t;
+    tg = (xmlSt_t *)t;
     tgM++;
   }
   (tg + tgL)->s = s - 1;
@@ -794,279 +797,258 @@ err:
   return -1;
 }
 
-int
-xmlEncodeString(
-  unsigned char *out
- ,int olen
- ,const unsigned char *in
- ,int ilen
-){
-  int len;
+#if 1
 
-  len = 0;
-  for (; ilen--;) switch (*in) {
-  case '&':
-    if (olen > 4) {
-      *out++ = '&';
-      *out++ = 'a';
-      *out++ = 'm';
-      *out++ = 'p';
-      *out++ = ';';
-      olen -= 5;
-    }
-    in++;
-    len += 5;
-    break;
-  case '\'':
-    if (olen > 5) {
-      *out++ = '&';
-      *out++ = 'a';
-      *out++ = 'p';
-      *out++ = 'o';
-      *out++ = 's';
-      *out++ = ';';
-      olen -= 6;
-    }
-    in++;
-    len += 6;
-    break;
-  case '>':
-    if (olen > 3) {
-      *out++ = '&';
-      *out++ = 'g';
-      *out++ = 't';
-      *out++ = ';';
-      olen -= 4;
-    }
-    in++;
-    len += 4;
-    break;
-  case '<':
-    if (olen > 3) {
-      *out++ = '&';
-      *out++ = 'l';
-      *out++ = 't';
-      *out++ = ';';
-      olen -= 4;
-    }
-    in++;
-    len += 4;
-    break;
-  case '"':
-    if (olen > 5) {
-      *out++ = '&';
-      *out++ = 'q';
-      *out++ = 'u';
-      *out++ = 'o';
-      *out++ = 't';
-      *out++ = ';';
-      olen -= 6;
-    }
-    in++;
-    len += 6;
-    break;
-  default:
-    if (olen > 0) {
-      *out++ = *in;
-      olen--;
-    }
-    in++;
-    len++;
-    break;
-  }
-  return len;
-}
+#define EMIT(Literal, Length) do { \
+  if (out_len >= (Length)) {       \
+    EMIT_##Length(Literal);        \
+    out_len -= (Length);           \
+  }                                \
+  length += (Length);              \
+} while (0,0)
 
-int
-xmlEncodeCdata(
-  unsigned char *out
- ,int olen
- ,const unsigned char *in
- ,int ilen
-){
-  static const char b[] = "<![CDATA[";
-  static const char e[] = "]]>";
-  int len;
-  unsigned int i;
+#define EMIT_1(L) do {            *out++ = 0[L]; } while (0,0)
+#define EMIT_2(L) do { EMIT_1(L); *out++ = 1[L]; } while (0,0)
+#define EMIT_3(L) do { EMIT_2(L); *out++ = 2[L]; } while (0,0)
+#define EMIT_4(L) do { EMIT_3(L); *out++ = 3[L]; } while (0,0)
+#define EMIT_5(L) do { EMIT_4(L); *out++ = 4[L]; } while (0,0)
+#define EMIT_6(L) do { EMIT_5(L); *out++ = 5[L]; } while (0,0)
+#define EMIT_7(L) do { EMIT_6(L); *out++ = 6[L]; } while (0,0)
+#define EMIT_8(L) do { EMIT_7(L); *out++ = 7[L]; } while (0,0)
+#define EMIT_9(L) do { EMIT_8(L); *out++ = 8[L]; } while (0,0)
 
-  len = 0;
-  for (i = 0; i < sizeof(b) - 1; i++, len++)
-    if (olen > 0) {
-      *out++ = b[i];
-      olen--;
-    }
-  for (; ilen--;) switch (*in) {
-  case ']':
-    if (ilen > 1
-     && *(in + 1) == ']'
-     && *(in + 2) == '>') {
-      if (olen > 0) {
-        *out++ = *in;
-        olen--;
-      }
-      in++;
-      len++;
-      if (olen > 0) {
-        *out++ = *in;
-        olen--;
-      }
-      in++;
-      len++;
-      for (i = 0; i < sizeof(e) - 1; i++, len++)
-        if (olen > 0) {
-          *out++ = e[i];
-          olen--;
-        }
-      for (i = 0; i < sizeof(b) - 1; i++, len++)
-        if (olen > 0) {
-          *out++ = b[i];
-          olen--;
-        }
-      if (olen > 0) {
-        *out++ = *in;
-        olen--;
-      }
-      in++;
-      len++;
-      ilen -= 2;
-    } else {
-      if (olen > 0) {
-        *out++ = *in;
-        olen--;
-      }
-      in++;
-      len++;
-    }
-    break;
-  default:
-    if (olen > 0) {
-      *out++ = *in;
-      olen--;
-    }
-    in++;
-    len++;
-    break;
-  }
-  for (i = 0; i < sizeof(e) - 1; i++, len++)
-    if (olen > 0) {
-      *out++ = e[i];
-      olen--;
-    }
-  return len;
-}
+#else
 
-int
-xmlDecodeUri(
-  unsigned char *out
- ,int olen
- ,const unsigned char *in
- ,int ilen
-){
-  int len;
-  unsigned char c;
+/* Determine if we can coerece compilers into emitting `rep movsb`. */
 
-  len = 0;
-  for (; ilen--;) switch (*in) {
-  case '%':
-    if (!(in++,ilen--)) goto err; else switch (*in) {
-    case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-      c = *in - '0';
-      goto nxtH;
-    case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-      c = 10 + (*in - 'A');
-      goto nxtH;
-    case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-      c = 10 + (*in - 'a');
-nxtH:
-      if (!(in++,ilen--)) goto err; else switch (*in) {
-      case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-        c *= 16;
-        c += *in - '0';
-        break;
-      case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-        c *= 16;
-        c += 10 + (*in - 'A');
-        break;
-      case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-        c *= 16;
-        c += 10 + (*in - 'a');
-        break;
+#define EMIT(Literal, Length) do {     \
+  if (out_len >= (Length))             \
+    for (int I = 0; I < (Length); ++I) \
+      *out_len--, *out++ = I[Literal]; \
+  length += (Length);                  \
+} while (0,0)
+
+#endif
+
+int xml_encode_string(const char *in, xml_size_t in_len,
+                      char *out, xml_size_t out_len)
+{
+  int length = 0;
+
+  while (in_len--) {
+    switch (*in) {
+      /* Escape special characters. */
+      case '&':  EMIT("&amp;",  5); break;
+      case '\'': EMIT("&apos;", 6); break;
+      case '>':  EMIT("&gt;",   4); break;
+      case '<':  EMIT("&lt;",   4); break;
+      case '"':  EMIT("&quot;", 6); break;
+
+      /* Otherwise, copy through. */
       default:
-        goto err;
-      }
-      if (olen > 0) {
-        *out++ = c;
-        olen--;
-      }
-      in++;
-      len++;
-      break;
-    default:
-      goto err;
+        if (out_len > 0)
+          out_len--, *out++ = *in;
+        length++;
     }
-    break;
-  default:
-    if (olen > 0) {
-      *out++ = *in;
-      olen--;
-    }
+
     in++;
-    len++;
-    break;
   }
-  return len;
-err:
-  return -1;
+
+  return length;
 }
 
-int
-xmlEncodeUri(
-  char *out
- ,int olen
- ,const unsigned char *in
- ,int ilen
-){
+int xml_encode_cdata(const unsigned char *in, xml_size_t in_len,
+                     char *out, xml_size_t out_len)
+{
+  int length = 0;
+
+  EMIT("<![CDATA[", 9);
+
+  /* PERF(mtwilliams): Replace with copy. */
+  while (in_len--) {
+    if (out_len > 0)
+      out_len--, *out++ = *in;
+    length++;
+    in++;
+  }
+
+  EMIT("]]>", 3);
+
+  return length;
+}
+
+#define EMIT(Literal, Length) do { \
+  if (out_len >= (Length)) {       \
+    EMIT_##Length(Literal);        \
+    out_len -= (Length);           \
+  }                                \
+  length += (Length);              \
+} while (0,0)
+
+#define EMIT_1(L) do {            *out++ = 0[L]; } while (0,0)
+#define EMIT_2(L) do { EMIT_1(L); *out++ = 1[L]; } while (0,0)
+#define EMIT_3(L) do { EMIT_2(L); *out++ = 2[L]; } while (0,0)
+#define EMIT_4(L) do { EMIT_3(L); *out++ = 3[L]; } while (0,0)
+#define EMIT_5(L) do { EMIT_4(L); *out++ = 4[L]; } while (0,0)
+#define EMIT_6(L) do { EMIT_5(L); *out++ = 5[L]; } while (0,0)
+#define EMIT_7(L) do { EMIT_6(L); *out++ = 6[L]; } while (0,0)
+#define EMIT_8(L) do { EMIT_7(L); *out++ = 7[L]; } while (0,0)
+#define EMIT_9(L) do { EMIT_8(L); *out++ = 8[L]; } while (0,0)
+
+#define COPY(Count) do {   \
+  if (out_len >= (Count))  \
+    while (*out++ = *in++) \
+      out_len--;           \
+  else                     \
+    in += (Count);         \
+  length += (Count);       \
+} while (0,0)
+
+int xml_encode_uri(const char *in, xml_size_t in_len,
+                   char *out, xml_size_t out_len)
+{
   static const char hex[] = "0123456789ABCDEF";
-  int len;
 
-  len = 0;
-  for (; ilen--;) switch (*in) { case '-': case '.':
-  case '0': case'1': case'2': case'3': case'4': case'5': case'6': case'7': case'8': case'9':
-  case 'A': case 'B': case 'C': case 'D': case 'E': case 'F': case 'G': case 'H': case 'I': case 'J': case 'K': case 'L': case 'M':
-  case 'N': case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T': case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z':
-  case '_':
-  case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j': case 'k': case 'l': case 'm':
-  case 'n': case 'o': case 'p': case 'q': case 'r': case 's': case 't': case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
-  case '~':
-    if (olen > 0) {
-      *out++ = *in;
-      olen--;
+  int length = 0;
+
+  while (in_len--) {
+    switch (*in) {
+      /* Copy through unreserved characters. */
+      case 'A': case 'B': case 'C': case 'D': case 'E': case 'F': case 'G':
+      case 'H': case 'I': case 'J': case 'K': case 'L': case 'M': case 'N':
+      case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T': case 'U':
+      case 'V': case 'W': case 'X': case 'Y': case 'Z': case 'a': case 'b':
+      case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i':
+      case 'j': case 'k': case 'l': case 'm': case 'n': case 'o': case 'p':
+      case 'q': case 'r': case 's': case 't': case 'u': case 'v': case 'w':
+      case 'x': case 'y': case 'z': case '0': case '1': case '2': case '3':
+      case '4': case '5': case '6': case '7': case '8': case '9': case '-':
+      case '_': case '.': case '~':
+        COPY(1);
+        break;
+
+      /* Otherwise, percent encode. */
+      default:
+        if (out_len >= 3) {
+          *out++ = '%';
+          *out++ = hex[*in >> 4];
+          *out++ = hex[*in & 0x0f];
+          out_len -= 3;
+        }
+
+        in++;
+        length += 3;
     }
-    in++;
-    len++;
-    break;
-  default:
-    if (olen > 2) {
-      *out++ = '%';
-      *out++ = hex[*in >> 4];
-      *out++ = hex[*in & 0x0f];
-      olen -= 3;
-    }
-    in++;
-    len += 3;
-    break;
   }
-  return len;
+
+  return length;
 }
 
-int
-xmlDecodeBase64(
-  unsigned char *out
- ,int olen
- ,char const *in
- ,int ilen
-){
-  static unsigned char const b64[] = {
+int xml_decode_uri(const char *in, xml_size_t in_len,
+                   char *out, xml_size_t out_len)
+{
+  int length = 0;
+
+  while (in_len--) {
+    unsigned char c;
+
+    switch (*in) {
+      /* Decode percent encoded character. */
+      case '%': {
+        if (!(in++, in_len--))
+          return -1;
+
+        switch (*in) {
+          case '0': case '1': case '2': case '3': case '4':
+          case '5': case '6': case '7': case '8': case '9':
+            c = *in - '0';
+            goto hex;
+          case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+          case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+            c = 10 + ((*in & 32) - 'A');
+            goto hex;
+
+          hex: {
+            if (!(in++, in_len--))
+              return -1;
+
+            switch (*in) {
+              case '0': case '1': case '2': case '3': case '4':
+              case '5': case '6': case '7': case '8': case '9':
+                c *= 16;
+                c += *in - '0';
+                break;
+              case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+              case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+                c *= 16;
+                c += 10 + ((*in & 32) - 'A');
+                break;
+              default:
+                return -1;
+            }
+
+            if (out_len > 0) {
+              *out++ = c;
+              out_len--;
+            }
+
+            in++;
+            length++;
+          } break;
+
+          default:
+            return -1;
+        }
+      } break;
+
+      /* Otherwise, copy through. */
+      default:
+        COPY(1);
+    }
+  }
+
+  return length;
+}
+
+int xml_encode_base64(const unsigned char *in, xml_size_t in_len,
+                      char *out, xml_size_t out_len)
+{
+  static const char alphabet[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+  int length;
+
+  for (length = 0; in_len >= 3; in += 3, in_len -= 3, length += 4) {
+    if (out_len >= 4) {
+      *out++ = alphabet[in[0] >> 2];
+      *out++ = alphabet[((in[0] << 4) & 0x30) | (in[1] >> 4)];
+      *out++ = alphabet[((in[1] << 2) & 0x3c) | (in[2] >> 6)];
+      *out++ = alphabet[in[2] & 0x3f];
+      out_len -= 4;
+    }
+  }
+
+  if (in_len) {
+    if (out_len >= 4) {
+      unsigned char fragment;
+      *out++ = alphabet[in[0] >> 2];
+      fragment = (in[0] << 4) & 0x30;
+      if (in_len > 1)
+        fragment |= in[1] >> 4;
+      *out++ = alphabet[fragment];
+      *out++ = (in_len > 1) ? alphabet[(in[1] << 2) & 0x3c] : '=';
+      *out++ = '=';
+    }
+    length += 4;
+  }
+
+  return length;
+}
+
+int xmL_decode_base64(const char *in, xml_size_t in_len,
+                      unsigned char *out, xml_size_t out_len)
+{
+  static unsigned char const decode[] = {
     66, 66, 66, 66,  66, 66, 66, 66,  66, 64, 64, 66,  66, 64, 66, 66,
     66, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 66,
     64, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 62,  66, 66, 66, 63,
@@ -1084,96 +1066,73 @@ xmlDecodeBase64(
     66, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 66,
     66, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 66,  66, 66, 66, 66
   };
-  unsigned long buf;
-  int len;
 
-  buf = 1;
-  len = 0;
-  while (ilen-- > 0) {
+  unsigned buffer = 1;
+  int length = 0;
+
+  while (in_len-- > 0) {
     unsigned char c;
 
-    switch ((c = b64[*(unsigned char*)in++])) {
-    case 66: /* invalid */
-      return -1;
-    case 64: /* whitespace */
-      continue;
-    case 65: /* pad */
-      ilen = 0;
-      break;
-    default:
-      buf = buf << 6 | c;
-      if (buf & 0x1000000) {
-        if (olen >= 3) {
-          *out++ = buf >> 16;
-          *out++ = buf >> 8;
-          *out++ = buf;
-          olen -= 3;
+    switch ((c = decode[*(unsigned char *)in++])) {
+      case 66: /* Invalid. */
+        return -1;
+      case 64: /* Whitespace. */
+        continue;
+      case 65: /* Padding. */
+        in_len = 0;
+        break;
+      default:
+        buffer = buffer << 6 | c;
+        if (buffer & 0x1000000) {
+          if (out_len >= 3) {
+            *out++ = buffer >> 16;
+            *out++ = buffer >> 8;
+            *out++ = buffer;
+            out_len -= 3;
+          }
+          length += 3;
+          buffer = 1;
         }
-        len += 3;
-        buf = 1;
-      }
-      break;
     }
   }
-  if (buf & 0x40000) {
-    if (olen >= 2) {
-      *out++ = buf >> 10;
-      *out++ = buf >> 2;
+
+  if (buffer & 0x40000) {
+    if (out_len >= 2) {
+      *out++ = buffer >> 10;
+      *out++ = buffer >> 2;
     }
-    len += 2;
-  } else if (buf & 0x1000) {
-    if (olen >= 1)
-      *out++ = buf >> 4;
-    len++;
+    length += 2;
+  } else if (buffer & 0x1000) {
+    if (out_len >= 1)
+      *out++ = buffer >> 4;
+    length += 1;
   }
-  return len;
+
+  return length;
 }
 
-int
-xmlEncodeBase64(
-  char *out
- ,int olen
- ,unsigned char const *in
- ,int ilen
-){
-  static const char b64[] =
-   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  int len;
+int xml_encode_hex(const unsigned char *in, xml_size_t in_len,
+                   char *out, xml_size_t out_len)
+{
+  static const char alphabet[] = "0123456789ABCDEF";
 
-  for (len = 0; ilen >= 3; in += 3, ilen -= 3, len += 4) {
-    if (olen >= 4) {
-      *out++ = b64[in[0] >> 2];
-      *out++ = b64[((in[0] << 4) & 0x30) | (in[1] >> 4)];
-      *out++ = b64[((in[1] << 2) & 0x3c) | (in[2] >> 6)];
-      *out++ = b64[in[2] & 0x3f];
-      olen -= 4;
+  int length = 0;
+
+  for (length = 0; in_len > 0; in++, in_len--, length += 2) {
+    if (out_len > 1) {
+      *out++ = alphabet[*in >> 4];
+      *out++ = alphabet[*in & 0x0F];
+      out_len -= 2;
     }
   }
-  if (ilen) {
-    if (olen >= 4) {
-      unsigned char frag;
 
-      *out++ = b64[in[0] >> 2];
-      frag = (in[0] << 4) & 0x30;
-      if (ilen > 1)
-          frag |= in[1] >> 4;
-      *out++ = b64[frag];
-      *out++ = (ilen > 1) ? b64[(in[1] << 2) & 0x3c] : '=';
-      *out++ = '=';
-    }
-    len += 4;
-  }
-  return len;
+  return length;
 }
 
-int
-xmlDecodeHex(
-  unsigned char *out
- ,int olen
- ,char const *in
- ,int ilen
-){
-  static unsigned char const hex[] = {
+int xml_decode_hex(const char *in, xml_size_t in_len,
+                   unsigned char *out, xml_size_t out_len)
+{
+  static const unsigned char decode[] = {
     17, 17, 17, 17,  17, 17, 17, 17,  17, 16, 16, 17,  17, 16, 17, 17,
     17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,
     16, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,
@@ -1191,54 +1150,36 @@ xmlDecodeHex(
     17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,
     17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17,  17, 17, 17, 17
   };
-  unsigned long buf;
-  int len;
 
-  buf = 1;
-  len = 0;
-  while (ilen-- > 0) {
+  unsigned long buffer = 1;
+  int length = 0;
+
+  while (in_len-- > 0) {
     unsigned char c;
 
-    switch ((c = hex[*(unsigned char*)in++])) {
-    case 17: /* invalid */
-      return -1;
-    case 16: /* whitespace */
-      continue;
-    default:
-      buf = buf << 4 | c;
-      if (buf & 0x100) {
-        if (olen > 0) {
-          *out++ = buf;
-          olen--;
+    switch ((c = decode[*(unsigned char*)in++])) {
+      case 17: /* Invalid. */
+        return -1;
+      case 16: /* Whitespace. */
+        continue;
+      default:
+        buffer = buffer << 4 | c;
+        if (buffer & 0x100) {
+          if (out_len > 0) {
+            *out++ = buffer;
+            out_len--;
+          }
+          length++;
+          buffer = 1;
         }
-        len++;
-        buf = 1;
-      }
-      break;
     }
   }
-  if (buf != 1)
+
+  if (buffer != 1)
+    /* Split byte. */
     return -1;
-  return len;
+
+  return length;
 }
 
-int
-xmlEncodeHex(
-  char *out
- ,int olen
- ,unsigned char const *in
- ,int ilen
-){
-  static const char hex[] =
-   "0123456789ABCDEF";
-  int len;
-
-  for (len = 0; ilen > 0; in++, ilen--, len += 2) {
-    if (olen > 1) {
-      *out++ = hex[*in >> 4];
-      *out++ = hex[*in & 0x0f];
-      olen -= 2;
-    }
-  }
-  return len;
-}
+XML_END_EXTERN_C
