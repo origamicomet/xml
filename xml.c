@@ -10,6 +10,18 @@ XML_BEGIN_EXTERN_C
 #include <stdio.h>
 #include <stdlib.h>
 
+xml_result_t xml_parse(const char *source,
+                       void *scratch,
+                       xml_size_t amount_of_scratch,
+                       xml_callback_fn *callback,
+                       void *context)
+{
+  /* We now allocate from. */
+  return XML_OK;
+}
+
+#if 0
+
 int
 xmlParse(
   xmlCb_t c
@@ -514,6 +526,8 @@ rtn:
   return s - b - 1;
 }
 
+#endif
+
 int
 xmlDecodeBody(
   unsigned char *out
@@ -857,7 +871,7 @@ int xml_encode_string(const char *in, xml_size_t in_len,
   return length;
 }
 
-int xml_encode_cdata(const unsigned char *in, xml_size_t in_len,
+int xml_encode_cdata(const char *in, xml_size_t in_len,
                      char *out, xml_size_t out_len)
 {
   int length = 0;

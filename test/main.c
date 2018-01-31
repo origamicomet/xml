@@ -8,9 +8,9 @@ static int
 cb(
   xmlTp_t typ
  ,unsigned int l
- ,const xmlSt_t *tg
- ,const xmlSt_t *nm
- ,const xmlSt_t *vl
+ ,const xml_fragment_t *tg
+ ,const xml_fragment_t *nm
+ ,const xml_fragment_t *vl
  ,void *v
 ){
   int i;

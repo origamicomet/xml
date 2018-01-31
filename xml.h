@@ -186,38 +186,75 @@ XML_CHECK_SIZE_OF_TYPE(sizeof(xml_uintptr_t) == sizeof(void *));
 
 #undef XML_CHECK_SIZE_OF_TYPE
 
-/* callback event types */
-typedef enum {
-  xmlTp_Eb /* element begin */
- ,xmlTp_Ea /* element attribute */
- ,xmlTp_Ee /* element end */
- ,xmlTp_Er /* syntax error */
-} xmlTp_t;
+/* TODO(mtwilliams): Errors. */
 
-/* pointers referencing fragments of constant buffer must include length */
+/* Callback event types. */
+typedef enum xml_event {
+  XML_BEGIN     = 1, /* Element begin. */
+  XML_ATTRIBUTE = 2, /* Element attribute. */
+  XML_END       = 3, /* Element end. */
+} xml_event_t;
+
+/* Reference to fragment of input. */
 typedef struct {
-  const unsigned char *s;
-  unsigned int l;
-} xmlSt_t;
+  const unsigned char *s; /* Pointer to fragment. */
+  xml_size_t l;           /* Length of fragment, as we don't mutate input. */
+} xml_fragment_t;
 
-/* prototype of a callback function */
-/* returns 0 on success else aborts parse */
-typedef int (*xmlCb_t)(
-  xmlTp_t
- ,unsigned int numberOfElementTagNames
- ,const xmlSt_t *elementTagName
- ,const xmlSt_t *elementAttributeName
- ,const xmlSt_t *EeBodyOrEaValue
- ,void *userContext
-);
+/* Signature of the callback you pass to the parser. You should return zero to
+ * continue parsing or any other value to halt (which results in XML_EUSER). */
+typedef XML_CALLBACK(int)
+  xml_callback_fn(/* Event type. */
+                  xml_event_t e,
+                  /* TODO(mtwilliams): Determine what this is. */
+                  xml_size_t n,
+                  /* Tag name. */
+                  const xml_fragment_t *const tag,
+                  /* Attribute name. */
+                  const xml_fragment_t *const name,
+                  /* Element body or attribute value. */
+                  const xml_fragment_t *const body_or_value,
+                  /* User-provided pointer. */
+                  void *context);
 
-/* return -1 on error else offset of last char parsed */
-/* buf must be null terminated */
-int xmlParse(xmlCb_t, const unsigned char *buf, void *userContext);
+/* Possible results of parsing. */
+typedef enum xml_result {
+  XML_OK      =  0, /* Okay! */
+  XML_EMEMORY = -1, /* Ran out of scratch memory while parsing. */
+  XML_EPARSE  = -2, /* Parsing failed because given document is malformed. */
+  XML_EUSER   = -3, /* User requested that parsing halt for some reason. */
+} xml_result_t;
 
-/* return -1 on error else the length of out */
-/* if length returned is more than length provided, allocate needed memory and retry */
-int xmlDecodeBody(unsigned char *out, int olen, const unsigned char *in, int ilen);
+/* Parses a document, calling the provided callback for the beginning and end
+ * of every element as well as for every attribute.
+ *
+ * The document *must* be null-terminated!
+ *
+ * Returns XML_OK on success or another `xml_result_t` on failure.
+ */
+extern XML_EXPORT(xml_result_t) xml_parse(/* Document to be parsed. */
+                                          const char *document,
+                                          /* Pointer to scratch memory. */
+                                          void *scratch,
+                                          /* Amount of scratch memory in bytes. */
+                                          xml_size_t amount_of_scratch,
+                                          /* User-provided callback and pointer. */
+                                          xml_callback_fn *callback,
+                                          void *context);
+
+/* Decodes a body into its raw representation.
+ *
+ * Returns the length of decoded body or a negative value on error.
+ *
+ * If the returned length is larger than the output buffer provided, you can
+ * allocate the required memory and retry. Since output is only written when
+ * the output buffer has sufficient room, you can safely pass `NULL` to
+ * determine the length of the decoded body.
+ */
+extern XML_EXPORT(int) xml_decode_body(/* Body and its length in bytes. */
+                                       const char *in, xml_size_t in_len,
+                                       /* Output buffer and its size in bytes. */
+                                       char *out, xml_size_t out_len);
 
 /* Encodes (escapes) a string.
  *
@@ -228,10 +265,12 @@ int xmlDecodeBody(unsigned char *out, int olen, const unsigned char *in, int ile
  * the output buffer has sufficient room, you can safely pass `NULL` to
  * determine the length of the escaped string.
  */
-extern XML_EXPORT(int) xml_encode_string(const char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_encode_string(/* String and its length in bytes.  */
+                                         const char *in, xml_size_t in_len,
+                                         /* Output buffer and its size in bytes.  */
                                          char *out, xml_size_t out_len);
 
-/* Encodes as CDATA.
+/* Encodes a string as CDATA.
  *
  * Returns the length of output or a negative value on error.
  *
@@ -240,7 +279,9 @@ extern XML_EXPORT(int) xml_encode_string(const char *in, xml_size_t in_len,
  * the output buffer has sufficient room, you can safely pass `NULL` to
  * determine the length of the escaped string.
  */
-extern XML_EXPORT(int) xml_encode_cdata(const unsigned char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_encode_cdata(/* String and its length in bytes.  */
+                                        const char *in, xml_size_t in_len,
+                                        /* Output buffer and its size in bytes. */
                                         char *out, xml_size_t out_len);
 
 /* <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"> */
@@ -255,7 +296,9 @@ extern XML_EXPORT(int) xml_encode_cdata(const unsigned char *in, xml_size_t in_l
  * the output buffer has sufficient room, you can safely pass `NULL` to
  * determine the length of the escaped string.
  */
-extern XML_EXPORT(int) xml_encode_uri(const char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_encode_uri(/* URI and its length in bytes. */
+                                      const char *in, xml_size_t in_len,
+                                      /* Output buffer and its size in bytes. */
                                       char *out, xml_size_t out_len);
 
 /* Decodes a percent encoded URI.
@@ -267,7 +310,9 @@ extern XML_EXPORT(int) xml_encode_uri(const char *in, xml_size_t in_len,
  * the output buffer has sufficient room, you can safely pass `NULL` to
  * determine the length of the escaped string.
  */
-extern XML_EXPORT(int) xml_decode_uri(const char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_decode_uri(/* Encoded URI and its length in bytes. */
+                                      const char *in, xml_size_t in_len,
+                                      /* Output buffer and its size in bytes. */
                                       char *out, xml_size_t out_len);
 
 /* <tag type="xs:base64Binary"></tag> */
@@ -286,7 +331,9 @@ extern XML_EXPORT(int) xml_decode_uri(const char *in, xml_size_t in_len,
  * determine the length of the encoded data, but you should prefer estimating
  * the output buffer size directly by using `xml_encode_base64_est`.
  */
-extern XML_EXPORT(int) xml_encode_base64(const unsigned char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_encode_base64(/* Raw data and its length in bytes. */
+                                         const unsigned char *in, xml_size_t in_len,
+                                         /* Output buffer and its size in bytes. */
                                          char *out, xml_size_t out_len);
 
 /* Estimates size of output buffer required for decoding. */
@@ -303,7 +350,9 @@ extern XML_EXPORT(int) xml_encode_base64(const unsigned char *in, xml_size_t in_
  * determine the length of the decoded data, but you should prefer estimating
  * the output buffer size directly by using `xml_decode_base64_est`.
  */
-extern XML_EXPORT(int) xml_decode_base64(const char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_decode_base64(/* Encoded data and its length in bytes. */
+                                         const char *in, xml_size_t in_len,
+                                         /* Output buffer and its size in bytes. */
                                          unsigned char *out, xml_size_t out_len);
 
 /* <tag type="xs:hexBinary"></tag> */
@@ -323,7 +372,9 @@ extern XML_EXPORT(int) xml_decode_base64(const char *in, xml_size_t in_len,
  * the output buffer size directly by using `xml_encode_hex_est`.
  */
 
-extern XML_EXPORT(int) xml_encode_hex(const unsigned char *in, xml_size_t in_len,
+extern XML_EXPORT(int) xml_encode_hex(/* Raw data and its length in bytes. */
+                                      const unsigned char *in, xml_size_t in_len,
+                                      /* Output buffer and its size in bytes. */
                                       char *out, xml_size_t out_len);
 
 /* Estimates size of output buffer required for decoding. */
@@ -341,8 +392,10 @@ extern XML_EXPORT(int) xml_encode_hex(const unsigned char *in, xml_size_t in_len
  * the output buffer size directly by using `xml_decode_hex_est`.
  */
 
-extern XML_EXPORT(int) xml_decode_hex(const char *in, xml_size_t in_len,
-                                       unsigned char *out, xml_size_t out_len);
+extern XML_EXPORT(int) xml_decode_hex(/* Encoded data and its length in bytes. */
+                                      const char *in, xml_size_t in_len,
+                                      /* Output buffer and its size in bytes. */
+                                      unsigned char *out, xml_size_t out_len);
 
 XML_END_EXTERN_C
 
