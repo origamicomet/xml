@@ -74,7 +74,6 @@ lib.exe /nologo %ARFLAGS% ^
         %ROOT%\_build\xml.obj
 
 if not %ERRORLEVEL% equ 0 (
-  popd
   echo Archiving failed.
   exit /B 1
 )

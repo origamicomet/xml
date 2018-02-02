@@ -190,15 +190,15 @@ XML_CHECK_SIZE_OF_TYPE(sizeof(xml_uintptr_t) == sizeof(void *));
 
 /* Callback event types. */
 typedef enum xml_event {
-  XML_BEGIN     = 1, /* Element begin. */
-  XML_ATTRIBUTE = 2, /* Element attribute. */
-  XML_END       = 3, /* Element end. */
+  XML_ELEMENT_BEGIN = 1, /* Element begin. */
+  XML_ELEMENT_END   = 2, /* Element end. */
+  XML_ATTRIBUTE     = 3  /* Element attribute. */
 } xml_event_t;
 
 /* Reference to fragment of input. */
 typedef struct {
-  const unsigned char *s; /* Pointer to fragment. */
-  xml_size_t l;           /* Length of fragment, as we don't mutate input. */
+  const char *s; /* Pointer to fragment. */
+  xml_size_t l;  /* Length of fragment, as we don't mutate input. */
 } xml_fragment_t;
 
 /* Signature of the callback you pass to the parser. You should return zero to
@@ -206,23 +206,24 @@ typedef struct {
 typedef XML_CALLBACK(int)
   xml_callback_fn(/* Event type. */
                   xml_event_t e,
-                  /* TODO(mtwilliams): Determine what this is. */
+                  /* Number of tags; depth. */
                   xml_size_t n,
-                  /* Tag name. */
-                  const xml_fragment_t *const tag,
+                  /* Tag names. */
+                  const xml_fragment_t *tags,
                   /* Attribute name. */
-                  const xml_fragment_t *const name,
+                  const xml_fragment_t *name,
                   /* Element body or attribute value. */
-                  const xml_fragment_t *const body_or_value,
+                  const xml_fragment_t *body_or_value,
                   /* User-provided pointer. */
                   void *context);
 
 /* Possible results of parsing. */
 typedef enum xml_result {
-  XML_OK      =  0, /* Okay! */
-  XML_EMEMORY = -1, /* Ran out of scratch memory while parsing. */
-  XML_EPARSE  = -2, /* Parsing failed because given document is malformed. */
-  XML_EUSER   = -3, /* User requested that parsing halt for some reason. */
+  XML_OK        =  0, /* Okay! */
+  XML_EMEMORY   = -1, /* Ran out of scratch memory while parsing. */
+  XML_EARGUMENT = -2, /* One or more bad arguments. */
+  XML_EPARSE    = -3, /* Parsing failed because given document is malformed. */
+  XML_EUSER     = -4, /* User requested that parsing halt for some reason. */
 } xml_result_t;
 
 /* Parses a document, calling the provided callback for the beginning and end

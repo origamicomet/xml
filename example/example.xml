@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entity id="9a133e81-fa95-4ba0-99b4-a9513d9a30de">
+  <components>
+    <transform id="69b00250-0bcf-46bd-bf77-02a9d8857dc8">
+      <name>transform</name>
+      <position>
+        <x>0.0</x>
+        <y>0.0</y>
+        <z>0.0</z>
+      </position>
+      <rotation>
+        <x>0.0</x>
+        <y>0.0</y>
+        <z>0.0</z>
+        <w>0.0</w>
+      </rotation>
+      <scale>
+        <x>1.0</x>
+        <y>1.0</y>
+        <z>1.0</z>
+      </scale>
+    </transform>
+    <camera id="afeb0636-ca50-4de0-805a-e4a0ec567373">
+      <name>camera</name>
+      <type>perspective</type>
+      <field_of_view>90.0</field_of_view>
+      <near>0.01</near> <!-- One centimeter. -->
+      <far>1000.0</far> <!-- One kilometer. -->
+    </camera>
+  </components>
+  <children>
+  </children>
+</entity>

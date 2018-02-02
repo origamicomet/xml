@@ -10,54 +10,98 @@ XML_BEGIN_EXTERN_C
 #include <stdio.h>
 #include <stdlib.h>
 
-xml_result_t xml_parse(const char *source,
+/* Various helper macros employed to reduce repetition and increase clarity. */
+
+#if 1
+
+#define EMIT(Literal, Length) do { \
+  if (out_len >= (Length)) {       \
+    EMIT_##Length(Literal);        \
+    out_len -= (Length);           \
+  }                                \
+  length += (Length);              \
+} while (0,0)
+
+#define EMIT_1(L) do {            *out++ = 0[L]; } while (0,0)
+#define EMIT_2(L) do { EMIT_1(L); *out++ = 1[L]; } while (0,0)
+#define EMIT_3(L) do { EMIT_2(L); *out++ = 2[L]; } while (0,0)
+#define EMIT_4(L) do { EMIT_3(L); *out++ = 3[L]; } while (0,0)
+#define EMIT_5(L) do { EMIT_4(L); *out++ = 4[L]; } while (0,0)
+#define EMIT_6(L) do { EMIT_5(L); *out++ = 5[L]; } while (0,0)
+#define EMIT_7(L) do { EMIT_6(L); *out++ = 6[L]; } while (0,0)
+#define EMIT_8(L) do { EMIT_7(L); *out++ = 7[L]; } while (0,0)
+#define EMIT_9(L) do { EMIT_8(L); *out++ = 8[L]; } while (0,0)
+
+#else
+
+/* Determine if we can coerce compilers into emitting `rep movsb`. */
+#define EMIT(Literal, Length) do {     \
+  if (out_len >= (Length))             \
+    for (int I = 0; I < (Length); ++I) \
+      *out_len--, *out++ = I[Literal]; \
+  length += (Length);                  \
+} while (0,0)
+
+#endif
+
+#define COPY(Count) do {   \
+  if (out_len >= (Count))  \
+    while (*out++ = *in++) \
+      out_len--;           \
+  else                     \
+    in += (Count);         \
+  length += (Count);       \
+} while (0,0)
+
+#define ADJUST(Pointer, Offset) \
+  (void *)(xml_uintptr_t(Pointer) + (Offset))
+
+static int xml__fallback(xml_event_t e,
+                         xml_size_t n,
+                         const xml_fragment_t *const tag,
+                         const xml_fragment_t *const name,
+                         const xml_fragment_t *const body_or_value,
+                         void *context)
+{
+  return 0;
+}
+
+xml_result_t xml_parse(const char *document,
                        void *scratch,
                        xml_size_t amount_of_scratch,
                        xml_callback_fn *callback,
                        void *context)
 {
-  /* We now allocate from. */
-  return XML_OK;
-}
+  /* Alias to reduce verbosity. */
+  const char *s = document;
 
-#if 0
+  xml_size_t tgM = 0; /* Maximum level allocated. */
+  xml_size_t tgL = 0; /* Current level. */
+  xml_size_t tgD = 0; /* Gone deeper? */
 
-int
-xmlParse(
-  xmlCb_t c
- ,const unsigned char *s
-,void *v
-){
-  const unsigned char *b;
-  unsigned int tgM; /* maximum level for allocation */
-  unsigned int tgL; /* current level */
-  unsigned int tgD; /* gone deeper? for body */
-  xmlSt_t *tg;
-  xmlSt_t nm;
-  xmlSt_t vl;
-  int inXml;
-  int inDoctype;
-  unsigned char ers[32];
+  xml_fragment_t *tags = (xml_fragment_t *)scratch;
 
-  if (!(b = s))
-    return -1;
-  tgD = tgL = tgM = 0;
-  tg = 0;
-  inXml = 0;
-  inDoctype = 0;
+  xml_fragment_t name;
+  xml_fragment_t value;
+
+  xml_size_t declaration = 0, /* Tracks if we're in a declaration. */
+             doctype     = 0; /* Tracks if we're in a DOCTYPE tag. */
+
+  if (!document)
+    /* No document provided? */
+    return XML_EARGUMENT;
+
+  if (!callback)
+    /* Rather than checking if we were passed a callback prior to each call, we
+       substitute a dummy callback. */
+    callback = &xml__fallback;
 
 tgEnd:
-  vl.s = s;
+  value.s = s;
   goto bgn;
 
 err:
-  vl.l = 1;
-  vl.s = s - 1;
-  nm.l = snprintf((char *)ers, sizeof(ers), "Error@%zd", vl.s - b);
-  nm.s = ers;
-  if (c)
-    c(xmlTp_Er, tgL, tg, &nm, &vl, v);
-  goto rtn;
+  return XML_EPARSE;
 
 atrEq:
   for (;;) switch (*s++) {
@@ -78,9 +122,9 @@ atrEq:
   }
 
 nlTg:
-  vl.l = 0;
-  if (c && c(xmlTp_Ee, tgL, tg, 0, &vl, v))
-    goto rtn;
+  value.l = 0;
+  if (callback(XML_ELEMENT_END, tgL, tags, 0, &value, context) != 0)
+    return XML_EUSER;
   if (tgL)
     tgL--;
   for (;;) switch (*s++) {
@@ -95,10 +139,10 @@ nlTg:
   }
 
 nlAtrVal:
-  vl.l = 0;
-  if (c && c(xmlTp_Ea, tgL, tg, &nm, &vl, v))
-    goto rtn;
-  nm.l = 0;
+  value.l = 0;
+  if (callback(XML_ATTRIBUTE, tgL, tags, &name, &value, context) != 0)
+    return XML_EUSER;
+  name.l = 0;
   s--;
   for (;;) switch (*s++) {
   case '\0':
@@ -114,14 +158,14 @@ nlAtrVal:
     goto atrValSq;
 
   case '/':
-    if (inXml)
+    if (declaration)
       goto atr;
     else
       goto nlTg;
 
   case '?':
-    if (inXml) {
-      inXml--;
+    if (declaration) {
+      declaration--;
       goto nlTg;
     } else
       goto atr;
@@ -130,15 +174,15 @@ nlAtrVal:
     goto err;
 
   case '>':
-    if (inDoctype) {
-      inDoctype--;
+    if (doctype) {
+      doctype--;
       s--;
       goto nlTg;
     } else
       goto tgEnd;
 
   case '[':
-    if (inDoctype)
+    if (doctype)
       goto tgEnd;
     else
       goto atr;
@@ -148,7 +192,7 @@ nlAtrVal:
   }
 
 atrNm:
-  nm.l = s - nm.s - 1;
+  name.l = s - name.s - 1;
   s--;
   for (;;) switch (*s++) {
   case '\0':
@@ -168,7 +212,7 @@ atrNm:
   }
 
 atr:
-  nm.s = s - 1;
+  name.s = s - 1;
   for (;;) switch (*s++) {
   case '\0':
     goto rtn;
@@ -185,12 +229,13 @@ atr:
   }
 
 atrVal:
-  vl.l = s - vl.s - 1;
-  if (c) {
-    if (nm.l && c(xmlTp_Ea, tgL, tg, &nm, &vl, v))
-      goto rtn;
-    else if (c(xmlTp_Ea, tgL, tg, &vl, &nm, v))
-      goto rtn;
+  value.l = s - value.s - 1;
+  if (name.l) {
+    if (callback(XML_ATTRIBUTE, tgL, tags, &name, &value, context) != 0) {
+      return XML_EUSER;
+    }
+  } else if (callback(XML_ATTRIBUTE, tgL, tags, &value, &name, context) != 0) {
+    return XML_EUSER;
   }
   for (;;) switch (*s++) {
   case '\0':
@@ -206,14 +251,14 @@ atrVal:
     goto atrValSq;
 
   case '/':
-    if (inXml)
+    if (declaration)
       goto atr;
     else
       goto nlTg;
 
   case '?':
-    if (inXml) {
-      inXml--;
+    if (declaration) {
+      declaration--;
       goto nlTg;
     } else
       goto atr;
@@ -222,15 +267,15 @@ atrVal:
     goto err;
 
   case '>':
-    if (inDoctype) {
-      inDoctype--;
+    if (doctype) {
+      doctype--;
       s--;
       goto nlTg;
     } else
       goto tgEnd;
 
   case '[':
-    if (inDoctype)
+    if (doctype)
       goto tgEnd;
     else
       goto atr;
@@ -240,7 +285,7 @@ atrVal:
   }
 
 atrValDq:
-  vl.s = s;
+  value.s = s;
   for (;;) switch (*s++) {
   case '\0':
     goto rtn;
@@ -256,7 +301,7 @@ atrValDq:
   }
 
 atrValSq:
-  vl.s = s;
+  value.s = s;
   for (;;) switch (*s++) {
   case '\0':
     goto rtn;
@@ -273,15 +318,15 @@ atrValSq:
 
 eTgNm:
   if (tgL)
-    (tg + tgL - 1)->l = s - (tg + tgL - 1)->s - 1;
+    tags[tgL-1].l = s - tags[tgL-1].s - 1;
   else {
-    (tg + tgL)->l = s - (tg + tgL)->s - 1;
+    tags[tgL].l = s - tags[tgL].s - 1;
     tgL++;
   }
   if (tgL <= tgD)
-    vl.l = 0;
-  if (c && c(xmlTp_Ee, tgL, tg, 0, &vl, v))
-    goto rtn;
+    value.l = 0;
+  if (callback(XML_ELEMENT_END, tgL, tags, 0, &value, context) != 0)
+    return XML_EUSER;
   if (tgL)
     tgL--;
   s--;
@@ -298,17 +343,15 @@ eTgNm:
 
 eNm:
   if (tgL)
-    (tg + tgL - 1)->s = s - 1;
+    tags[tgL-1].s = s - 1;
   else {
     if (tgL == tgM) {
-      void *t;
-
-      if (!(t = realloc(tg, (tgM + 1) * sizeof(*tg))))
-        goto rtn;
-      tg = (xmlSt_t *)t;
+      if (sizeof(xml_fragment_t) > amount_of_scratch)
+        return XML_EMEMORY;
+      amount_of_scratch -= sizeof(xml_fragment_t);
       tgM++;
     }
-    (tg + tgL)->s = s - 1;
+    tags[tgL].s = s - 1;
   }
   for (;;) switch (*s++) {
   case '\0':
@@ -340,26 +383,26 @@ eTg:
   }
 
 sTgNm:
-  (tg + tgL)->l = s - (tg + tgL)->s - 1;
-  if ((tg + tgL)->l == 4
-   && *((tg + tgL)->s + 0) == '?'
-   && *((tg + tgL)->s + 1) == 'x'
-   && *((tg + tgL)->s + 2) == 'm'
-   && *((tg + tgL)->s + 3) == 'l')
-    inXml = 1;
-  else if ((tg + tgL)->l == 8
-   && *((tg + tgL)->s + 0) == '!'
-   && *((tg + tgL)->s + 1) == 'D'
-   && *((tg + tgL)->s + 2) == 'O'
-   && *((tg + tgL)->s + 3) == 'C'
-   && *((tg + tgL)->s + 4) == 'T'
-   && *((tg + tgL)->s + 5) == 'Y'
-   && *((tg + tgL)->s + 6) == 'P'
-   && *((tg + tgL)->s + 7) == 'E')
-    inDoctype = 1;
+  tags[tgL].l = s - tags[tgL].s - 1;
+  if (tags[tgL].l == 4
+   && *(tags[tgL].s + 0) == '?'
+   && *(tags[tgL].s + 1) == 'x'
+   && *(tags[tgL].s + 2) == 'm'
+   && *(tags[tgL].s + 3) == 'l')
+    declaration = 1;
+  else if (tags[tgL].l == 8
+   && *(tags[tgL].s + 0) == '!'
+   && *(tags[tgL].s + 1) == 'D'
+   && *(tags[tgL].s + 2) == 'O'
+   && *(tags[tgL].s + 3) == 'C'
+   && *(tags[tgL].s + 4) == 'T'
+   && *(tags[tgL].s + 5) == 'Y'
+   && *(tags[tgL].s + 6) == 'P'
+   && *(tags[tgL].s + 7) == 'E')
+    doctype = 1;
   tgD = tgL++;
-  if (c && c(xmlTp_Eb, tgL, tg, 0, 0, v))
-    goto rtn;
+  if (callback(XML_ELEMENT_BEGIN, tgL, tags, 0, 0, context) != 0)
+    return XML_EUSER;
   s--;
   for (;;) switch (*s++) {
   case '\0':
@@ -375,14 +418,14 @@ sTgNm:
     goto atrValSq;
 
   case '/':
-    if (inXml)
+    if (declaration)
       goto atr;
     else
       goto nlTg;
 
   case '?':
-    if (inXml) {
-      inXml--;
+    if (declaration) {
+      declaration--;
       goto nlTg;
     } else
       goto atr;
@@ -391,15 +434,15 @@ sTgNm:
     goto err;
 
   case '>':
-    if (inDoctype) {
-      inDoctype--;
+    if (doctype) {
+      doctype--;
       s--;
       goto nlTg;
     } else
       goto tgEnd;
 
   case '[':
-    if (inDoctype)
+    if (doctype)
       goto tgEnd;
     else
       goto atr;
@@ -410,16 +453,14 @@ sTgNm:
 
 sNm:
   if (tgL == tgM) {
-    void *t;
-
-    if (!(t = realloc(tg, (tgM + 1) * sizeof(*tg))))
-      goto rtn;
-    tg = (xmlSt_t *)t;
+    if (sizeof(xml_fragment_t) > amount_of_scratch)
+      return XML_EMEMORY;
+    amount_of_scratch -= sizeof(xml_fragment_t);
     tgM++;
   }
-  (tg + tgL)->s = s - 1;
-  if (inDoctype)
-    inDoctype++;
+  tags[tgL].s = s - 1;
+  if (doctype)
+    doctype++;
   for (;;) switch (*s++) {
   case '\0':
     goto rtn;
@@ -429,14 +470,14 @@ sNm:
     goto sTgNm;
 
   case '/':
-    if (inXml)
+    if (declaration)
       break;
     else
       goto sTgNm;
 
   case '?':
-    if (inXml) {
-      inXml--;
+    if (declaration) {
+      declaration--;
       goto sTgNm;
     } else
       break;
@@ -449,7 +490,7 @@ sNm:
   }
 
 sTg:
-  vl.l = s - vl.s - 1;
+  value.l = s - value.s - 1;
   for (;;) switch (*s++) {
   case '\0':
     goto rtn;
@@ -510,8 +551,8 @@ bgn:
     goto sTg;
 
   case '>':
-    if (inDoctype) {
-      inDoctype--;
+    if (doctype) {
+      doctype--;
       s--;
       goto nlTg;
     } else
@@ -522,11 +563,10 @@ bgn:
   }
 
 rtn:
-  free(tg);
-  return s - b - 1;
+  return XML_OK;
 }
 
-#endif
+#if 0
 
 int
 xmlDecodeBody(
@@ -811,37 +851,6 @@ err:
   return -1;
 }
 
-#if 1
-
-#define EMIT(Literal, Length) do { \
-  if (out_len >= (Length)) {       \
-    EMIT_##Length(Literal);        \
-    out_len -= (Length);           \
-  }                                \
-  length += (Length);              \
-} while (0,0)
-
-#define EMIT_1(L) do {            *out++ = 0[L]; } while (0,0)
-#define EMIT_2(L) do { EMIT_1(L); *out++ = 1[L]; } while (0,0)
-#define EMIT_3(L) do { EMIT_2(L); *out++ = 2[L]; } while (0,0)
-#define EMIT_4(L) do { EMIT_3(L); *out++ = 3[L]; } while (0,0)
-#define EMIT_5(L) do { EMIT_4(L); *out++ = 4[L]; } while (0,0)
-#define EMIT_6(L) do { EMIT_5(L); *out++ = 5[L]; } while (0,0)
-#define EMIT_7(L) do { EMIT_6(L); *out++ = 6[L]; } while (0,0)
-#define EMIT_8(L) do { EMIT_7(L); *out++ = 7[L]; } while (0,0)
-#define EMIT_9(L) do { EMIT_8(L); *out++ = 8[L]; } while (0,0)
-
-#else
-
-/* Determine if we can coerece compilers into emitting `rep movsb`. */
-
-#define EMIT(Literal, Length) do {     \
-  if (out_len >= (Length))             \
-    for (int I = 0; I < (Length); ++I) \
-      *out_len--, *out++ = I[Literal]; \
-  length += (Length);                  \
-} while (0,0)
-
 #endif
 
 int xml_encode_string(const char *in, xml_size_t in_len,
@@ -890,33 +899,6 @@ int xml_encode_cdata(const char *in, xml_size_t in_len,
 
   return length;
 }
-
-#define EMIT(Literal, Length) do { \
-  if (out_len >= (Length)) {       \
-    EMIT_##Length(Literal);        \
-    out_len -= (Length);           \
-  }                                \
-  length += (Length);              \
-} while (0,0)
-
-#define EMIT_1(L) do {            *out++ = 0[L]; } while (0,0)
-#define EMIT_2(L) do { EMIT_1(L); *out++ = 1[L]; } while (0,0)
-#define EMIT_3(L) do { EMIT_2(L); *out++ = 2[L]; } while (0,0)
-#define EMIT_4(L) do { EMIT_3(L); *out++ = 3[L]; } while (0,0)
-#define EMIT_5(L) do { EMIT_4(L); *out++ = 4[L]; } while (0,0)
-#define EMIT_6(L) do { EMIT_5(L); *out++ = 5[L]; } while (0,0)
-#define EMIT_7(L) do { EMIT_6(L); *out++ = 6[L]; } while (0,0)
-#define EMIT_8(L) do { EMIT_7(L); *out++ = 7[L]; } while (0,0)
-#define EMIT_9(L) do { EMIT_8(L); *out++ = 8[L]; } while (0,0)
-
-#define COPY(Count) do {   \
-  if (out_len >= (Count))  \
-    while (*out++ = *in++) \
-      out_len--;           \
-  else                     \
-    in += (Count);         \
-  length += (Count);       \
-} while (0,0)
 
 int xml_encode_uri(const char *in, xml_size_t in_len,
                    char *out, xml_size_t out_len)
