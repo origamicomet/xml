@@ -24,7 +24,7 @@ if not defined TOOLCHAIN (
 )
 
 @rem Default to debug builds.
-if not defined DEBUG (set DEBUG=1)
+if not defined DEBUG (set DEBUG=0)
 
 @rem Default to Windows builds.
 if not defined TARGET (set TARGET=windows)
