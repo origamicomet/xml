@@ -60,6 +60,24 @@ int callback(xml_event_t e,
   return 0;
 }
 
+static void walk_and_print(xml_element_t *element, unsigned depth) {
+  if (depth) {
+    if (depth > 1)
+      printf("%*.c", (depth-1)*2, '\0');
+    printf("%.*s\n", element->name.l, element->name.s);
+  }
+
+  for (xml_size_t i = 0; i < element->num_of_attributes; ++i) {
+    const xml_attribute_t *attribute = &element->attributes[i];
+    if (depth > 1)
+      printf("%*.c", (depth-1)*2, '\0');
+    printf(" %.*s = %.*s\n", attribute->name.l, attribute->name.s, attribute->value.l, attribute->value.s);
+  }
+
+  for (xml_element_t *e = element->children; e; e = e->sibling)
+    walk_and_print(e, depth+1);
+}
+
 int main(int argc, const char *argv[]) {
   static const char path[] = "example.xml";
 
@@ -68,7 +86,7 @@ int main(int argc, const char *argv[]) {
   static unsigned char scratch[1 * 1024 * 1024];
 
   switch (xml_parse(document, (void *)scratch, sizeof(scratch), &callback, NULL)) {
-    case XML_EMEMORY:
+    case XML_ESCRATCH:
       fprintf(stderr, "Ran out of scratch!\n");
       return EXIT_FAILURE;
 
@@ -87,6 +105,15 @@ int main(int argc, const char *argv[]) {
     case XML_OK:
       fprintf(stdout, "Done.\n");
   }
+
+  xml_element_t *root;
+
+  if (xml_parse_into_memory(document, (void *)scratch, sizeof(scratch), malloc(1 * 1024 * 1024), 1 * 1024 * 1024, &root) != XML_OK) {
+    fprintf(stderr, "Parsing into memory failed for some reason.\n");
+    return EXIT_FAILURE;
+  }
+
+  walk_and_print(root, 0);
 
   return EXIT_SUCCESS;
 }

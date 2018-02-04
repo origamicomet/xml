@@ -8,6 +8,8 @@ After embedding, you parse markup by calling `xml_parse` and passing a callback 
 
 The parser can also be used to to validate markup by passing a `NULL` callback and verifying the return value of `xml_parse`.
 
+A tree parser built on top of the evented parser is also provided. You can parse markup into a tree structure by calling `xml_parse_into_memory` and providing additional memory for the tree. Afterwords, you can walk the returned tree by following the `children` and `sibling` pointers in `xml_element_t`.
+
 Also included are encoding and decoding routines often used during markup parsing and generation. They are designed so that you can determine the amount of memory necessary required in a similar fashion to `snprintf` by not providing a buffer.
 
 This library is distributed under the terms described in LICENSE.

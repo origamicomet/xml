@@ -218,10 +218,12 @@ typedef XML_CALLBACK(int)
 /* Possible results of parsing. */
 typedef enum xml_result {
   XML_OK        =  0, /* Okay! */
-  XML_EMEMORY   = -1, /* Ran out of scratch memory while parsing. */
-  XML_EARGUMENT = -2, /* One or more bad arguments. */
-  XML_EPARSE    = -3, /* Parsing failed because given document is malformed. */
-  XML_EUSER     = -4, /* User requested that parsing halt for some reason. */
+  XML_ESCRATCH  = -1, /* Ran out of scratch memory while parsing. */
+  XML_EMEMORY   = -2, /* Ran out of memory while parsing. */
+  XML_EARGUMENT = -3, /* One or more bad arguments. */
+  XML_EPARSE    = -4, /* Parsing failed because given document is malformed. */
+  XML_EDEPTH    = -5, /* Parsing halted because of excessive depth. */
+  XML_EUSER     = -6  /* User requested that parsing halt for some reason. */
 } xml_result_t;
 
 /* Parses a document, calling the provided callback for the beginning and end
@@ -240,6 +242,39 @@ extern XML_EXPORT(xml_result_t) xml_parse(/* Document to be parsed. */
                                           /* User-provided callback and pointer. */
                                           xml_callback_fn *callback,
                                           void *context);
+
+typedef struct xml_element {
+  xml_fragment_t name;
+  xml_fragment_t body;
+  struct xml_attribute *attributes;
+  xml_size_t num_of_attributes;
+  struct xml_element *children;
+  struct xml_element *sibling;
+} xml_element_t;
+
+typedef struct xml_attribute {
+  xml_fragment_t name;
+  xml_fragment_t value;
+} xml_attribute_t;
+
+/* Parses a document into a tree structure.
+ *
+ * The document *must* be null-terminated!
+ *
+ * Returns XML_OK on success or another `xml_result_t` on failure.
+ */
+extern XML_EXPORT(xml_result_t) xml_parse_into_memory(/* Document to be parsed. */
+                                                      const char *document,
+                                                      /* Pointer to scratch memory. */
+                                                      void *scratch,
+                                                      /* Amount of scratch memory in bytes. */
+                                                      xml_size_t amount_of_scratch,
+                                                      /* Pointer to memory for elements and attributes. */
+                                                      void *memory,
+                                                      /* Amount of memory in bytes. */
+                                                      xml_size_t amount_of_memory,
+                                                      /* Returned pointer to dummy root element. */
+                                                      xml_element_t **root);
 
 /* Decodes a body into its raw representation.
  *
@@ -445,12 +480,12 @@ XML_BEGIN_EXTERN_C
   length += (Count);       \
 } while (0,0)
 
-static int xml__fallback(xml_event_t e,
-                         xml_size_t n,
-                         const xml_fragment_t *const tag,
-                         const xml_fragment_t *const name,
-                         const xml_fragment_t *const body_or_value,
-                         void *context)
+static int xml_parse__fallback(xml_event_t e,
+                               xml_size_t n,
+                               const xml_fragment_t *const tag,
+                               const xml_fragment_t *const name,
+                               const xml_fragment_t *const body_or_value,
+                               void *context)
 {
   return 0;
 }
@@ -483,7 +518,7 @@ xml_result_t xml_parse(const char *document,
   if (!callback)
     /* Rather than checking if we were passed a callback prior to each call, we
        substitute a dummy callback. */
-    callback = &xml__fallback;
+    callback = &xml_parse__fallback;
 
 tgEnd:
   value.s = s;
@@ -736,7 +771,7 @@ eNm:
   else {
     if (tgL == tgM) {
       if (sizeof(xml_fragment_t) > amount_of_scratch)
-        return XML_EMEMORY;
+        return XML_ESCRATCH;
       amount_of_scratch -= sizeof(xml_fragment_t);
       tgM++;
     }
@@ -843,7 +878,7 @@ sTgNm:
 sNm:
   if (tgL == tgM) {
     if (sizeof(xml_fragment_t) > amount_of_scratch)
-      return XML_EMEMORY;
+      return XML_ESCRATCH;
     amount_of_scratch -= sizeof(xml_fragment_t);
     tgM++;
   }
@@ -953,6 +988,146 @@ bgn:
 
 rtn:
   return XML_OK;
+}
+typedef struct xml_parser {
+#if 0
+  xml_element_t *declaration;
+  xml_element_t *doctype;
+#endif
+
+  xml_element_t *elements[256];
+
+  void *memory;
+  xml_size_t left;
+
+  xml_result_t result;
+} xml_parser_t;
+
+#define BUMP(Pointer, Count) \
+  (void *)(xml_uintptr_t(Pointer) + (Count))
+
+static xml_element_t *allocate_an_element(xml_parser_t *p)
+{
+  if (p->left >= sizeof(xml_element_t)) {
+    xml_element_t *element = (xml_element_t *)p->memory;
+
+    p->memory = BUMP(p->memory, sizeof(xml_element_t));
+    p->left -= sizeof(xml_element_t);
+
+    element->name.s = 0;
+    element->name.l = 0;
+    element->body.s = 0;
+    element->body.l = 0;
+    element->attributes = 0;
+    element->num_of_attributes = 0;
+    element->children = 0;
+    element->sibling  = 0;
+
+    return element;
+  }
+
+  return 0;
+}
+
+static xml_attribute_t *allocate_an_attribute(xml_parser_t *p)
+{
+  if (p->left >= sizeof(xml_attribute_t)) {
+    xml_attribute_t *attribute = (xml_attribute_t *)p->memory;
+
+    p->memory = BUMP(p->memory, sizeof(xml_attribute_t));
+    p->left -= sizeof(xml_attribute_t);
+
+    attribute->name.s = 0;
+    attribute->name.l = 0;
+    attribute->value.s = 0;
+    attribute->value.l = 0;
+
+    return attribute;
+  }
+
+  return 0;
+}
+
+/* Don't export our internal helper macro. */
+#undef BUMP
+
+static int xml_parse_into_memory__callback(xml_event_t e,
+                                           xml_size_t n,
+                                           const xml_fragment_t *tags,
+                                           const xml_fragment_t *name,
+                                           const xml_fragment_t *body_or_value,
+                                           void *context)
+{
+  xml_parser_t *p = (xml_parser_t *)context;
+
+  if (n >= 256)
+    return XML_EDEPTH;
+
+  switch (e) {
+    case XML_ELEMENT_BEGIN: {
+      xml_element_t *element = allocate_an_element(p);
+
+      if (!element)
+        return p->result = XML_EMEMORY, -1;
+
+      if (p->elements[n-1]->children)
+        p->elements[n]->sibling = element;
+      else
+        p->elements[n-1]->children = element;
+
+      p->elements[n] = element;
+
+      element->name = tags[n-1];
+    } break;
+
+    case XML_ELEMENT_END: {
+      if (body_or_value)
+        p->elements[n]->body = *body_or_value;
+    } break;
+
+    case XML_ATTRIBUTE: {
+      xml_attribute_t *attribute = allocate_an_attribute(p);
+
+      if (!attribute)
+        return p->result = XML_EMEMORY, -1;
+
+      if (p->elements[n]->num_of_attributes++ == 0)
+        p->elements[n]->attributes = attribute;
+
+      attribute->name = *name;
+      attribute->value = *body_or_value;
+    } break;
+  }
+
+  return 0;
+}
+
+xml_result_t xml_parse_into_memory(const char *document,
+                                   void *scratch,
+                                   xml_size_t amount_of_scratch,
+                                   void *memory,
+                                   xml_size_t amount_of_memory,
+                                   xml_element_t **root)
+{
+  xml_parser_t parser;
+
+  parser.memory = memory;
+  parser.left   = amount_of_memory;
+
+  *root = parser.elements[0] = allocate_an_element(&parser);
+
+  parser.result = XML_OK;
+
+  xml_result_t result = xml_parse(document,
+                                  scratch,
+                                  amount_of_scratch,
+                                  &xml_parse_into_memory__callback,
+                                  (void *)&parser);
+
+  if (result == XML_EUSER)
+    return parser.result;
+
+  return result;
 }
 
 #if 0
